@@ -1,0 +1,134 @@
+---
+title: "SB"
+author: "Thomas Nguyen"
+date: "09/07/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r}
+library(tidyverse)
+library(fpp3)
+library(lubridate)
+```
+
+```{r}
+library(readxl)
+sb_report <- read_excel("SB_Report.xlsx")
+```
+
+```{r}
+sb_report_total <- sb_report  %>% 
+  mutate(date = mdy(Date),
+         id = row_number()) %>% 
+  select(date, Install, Uninstall, Upgrade, Downgrade)
+sb_report_total <- sb_report_total %>% as_tsibble(index = date)
+```
+
+
+
+```{r}
+sb_report_total %>% select(Uninstall) %>% 
+  model(
+    STL(Uninstall ~ 
+              trend(window = 7) +
+              season(window = "periodic"),
+    robust = TRUE))%>%
+  components() %>%
+  autoplot()
+
+
+```
+
+```{r}
+sb_report_total %>% select(Uninstall) %>% 
+  model(
+    STL(Uninstall ~ 
+              trend(window = 7), 
+    robust = TRUE))%>%
+  components() %>%
+  autoplot()
+
+```
+
+```{r}
+sb_report_total %>% select(Install) %>% 
+  model(
+    STL(Install ~ 
+              trend(window = 7), 
+    robust = TRUE))%>%
+  components() %>%
+  autoplot()
+
+```
+
+```{r}
+sb_report_total %>% pivot_longer(cols = c(2:4), names_to = "Type", values_to = "values") %>%
+  ggplot(aes(x = date, y = values, color = Type))+ 
+  geom_line()
+```
+
+
+```{r}
+sb_report_total_week <- sb_report_total %>% as_tibble() %>%
+  mutate(week = floor_date(date, "week")) %>%
+  group_by(week) %>%
+  summarise(weekly_install = mean(Install),
+            weekly_uninstall = mean(Uninstall),
+            weekly_upgrade = mean(Upgrade),
+            weekly_downgrade = mean(Downgrade))
+
+
+sb_report_total_week %>% pivot_longer(cols = c(2:5), names_to = "Type", values_to = "values") %>%
+  ggplot(aes(x = week, y = values, color = Type))+ 
+  geom_line()+
+  xlab("Date")+
+  ylab("Lượt khách")+
+  ggtitle("Lượt cài đặt, gỡ, upgrade và downgrade")
+
+```
+
+
+```{r}
+sb_report_total_week %>% mutate(churn = weekly_uninstall/weekly_install*100 ) %>%
+  pivot_longer(cols = c(2:6), names_to = "Type", values_to = "values") %>%
+  ggplot(aes(x = week, y = values, color = Type))+ 
+  geom_line()+
+  xlab("Date")+
+  ylab("Lượt khách")+
+  ggtitle("Lượt cài đặt, gỡ, upgrade và downgrade")
+
+```
+
+
+```{r}
+sb_report_total_week %>% mutate(churn = weekly_uninstall/weekly_install) 
+sb_report_total_week %>% mutate(churn = weekly_uninstall/weekly_install ) %>%
+   ggplot(aes(x = week, y = churn))+
+   geom_line()+
+   ggtitle("churn rate")
+```
+
+
+
+```{r}
+sb_report_total %>% mutate(Day_Type = wday(date, label = TRUE, week_start = 1)) %>%
+  as_tibble() %>%
+  select (-date) %>%
+  group_by(Day_Type)  %>%
+  summarise(daiky_install = mean(Install),
+            daily_uninstall = mean(Uninstall),
+            daily_upgrade = mean(Upgrade),
+            daily_downgrade = mean(Downgrade)) %>%
+  pivot_longer(cols = c(2:5), names_to = "Type", values_to = "values") %>%
+  mutate(Type = factor(Type, levels = c("daiky_install", "daily_uninstall", "daily_upgrade", "daily_downgrade" ))) %>%
+  ggplot(aes(x = Day_Type, y = values, fill = Type))+
+  geom_col()+
+  xlab("Weekday")+
+  ylab("Number of action")+
+  ggtitle("Number of actions by weekday")
+```
+
